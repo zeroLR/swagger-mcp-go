@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -20,11 +21,56 @@ import (
 	"github.com/zeroLR/swagger-mcp-go/internal/specs"
 )
 
+var (
+	// CLI flags
+	swaggerFile = flag.String("swagger-file", "", "Path to OpenAPI/Swagger specification file")
+	configFile  = flag.String("config", "", "Path to configuration file")
+	mode        = flag.String("mode", "stdio", "Server mode: stdio, http, or sse")
+	baseURL     = flag.String("base-url", "", "Base URL for upstream API (overrides spec servers)")
+	showVersion = flag.Bool("version", false, "Show version information")
+	showHelp    = flag.Bool("help", false, "Show help information")
+)
+
+const version = "1.0.0"
+
 func main() {
+	flag.Parse()
+
+	if *showHelp {
+		printHelp()
+		os.Exit(0)
+	}
+
+	if *showVersion {
+		fmt.Printf("swagger-mcp-go version %s\n", version)
+		os.Exit(0)
+	}
+
+	if *swaggerFile == "" {
+		fmt.Fprintf(os.Stderr, "Error: --swagger-file is required\n")
+		printHelp()
+		os.Exit(1)
+	}
+
 	// Load configuration
-	cfg, err := config.Load("")
+	cfg, err := config.Load(*configFile)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Override mode if specified
+	if *mode != "stdio" {
+		switch *mode {
+		case "http", "sse":
+			// Valid modes
+		default:
+			log.Fatalf("Invalid mode: %s. Must be one of: stdio, http, sse", *mode)
+		}
+	}
+
+	// Disable console logging for stdio mode
+	if *mode == "stdio" {
+		cfg.Logging.Level = "error" // Minimize logging for stdio
 	}
 
 	// Initialize logger
@@ -34,10 +80,10 @@ func main() {
 	}
 	defer logger.Sync()
 
-	logger.Info("Starting swagger-mcp-go server",
-		zap.String("version", "1.0.0"),
-		zap.Int("port", cfg.Server.Port),
-		zap.Bool("mcpEnabled", cfg.MCP.Enabled))
+	logger.Info("Starting swagger-mcp-go",
+		zap.String("version", version),
+		zap.String("mode", *mode),
+		zap.String("swaggerFile", *swaggerFile))
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -53,35 +99,41 @@ func main() {
 	// Start registry cleanup
 	reg.StartCleanup(ctx, 5*time.Minute)
 
-	// Initialize Gin router
-	router := setupRouter(cfg, logger.Named("http"), reg)
+	// Create MCP server
+	mcpServer := mcp.NewServer(logger.Named("mcp"), cfg, reg, fetcher)
+	mcpServer.SetMode(mcp.ServerMode(*mode))
 
-	// Create HTTP server
-	httpServer := &http.Server{
-		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
-		Handler:      router,
-		ReadTimeout:  cfg.Server.ReadTimeout,
-		WriteTimeout: cfg.Server.WriteTimeout,
+	// Load OpenAPI spec and register tools
+	headers := make(map[string]string)
+	if err := mcpServer.LoadSpecFromFile(*swaggerFile, *baseURL, headers); err != nil {
+		logger.Fatal("Failed to load OpenAPI spec", zap.Error(err))
 	}
 
-	// Start MCP server if enabled
-	var mcpServer *mcp.Server
-	if cfg.MCP.Enabled {
-		mcpServer = mcp.NewServer(logger.Named("mcp"), reg, fetcher)
+	// Start MCP server
+	go func() {
+		if err := mcpServer.Start(ctx); err != nil {
+			logger.Error("MCP server error", zap.Error(err))
+		}
+	}()
+
+	// Start HTTP server only if not in stdio mode
+	var httpServer *http.Server
+	if *mode != "stdio" {
+		router := setupRouter(cfg, logger.Named("http"), reg)
+		httpServer = &http.Server{
+			Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
+			Handler:      router,
+			ReadTimeout:  cfg.Server.ReadTimeout,
+			WriteTimeout: cfg.Server.WriteTimeout,
+		}
+
 		go func() {
-			if err := mcpServer.Start(ctx); err != nil {
-				logger.Error("MCP server error", zap.Error(err))
+			logger.Info("Starting HTTP server", zap.String("addr", httpServer.Addr))
+			if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				logger.Fatal("HTTP server error", zap.Error(err))
 			}
 		}()
 	}
-
-	// Start HTTP server
-	go func() {
-		logger.Info("Starting HTTP server", zap.String("addr", httpServer.Addr))
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Fatal("HTTP server error", zap.Error(err))
-		}
-	}()
 
 	// Wait for interrupt signal
 	sigChan := make(chan os.Signal, 1)
@@ -93,22 +145,55 @@ func main() {
 	// Cancel context to stop background processes
 	cancel()
 
-	// Shutdown HTTP server with timeout
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer shutdownCancel()
+	// Shutdown HTTP server with timeout if running
+	if httpServer != nil {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer shutdownCancel()
 
-	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		logger.Error("HTTP server shutdown error", zap.Error(err))
-	}
-
-	// Stop MCP server
-	if mcpServer != nil {
-		if err := mcpServer.Stop(); err != nil {
-			logger.Error("MCP server stop error", zap.Error(err))
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			logger.Error("HTTP server shutdown error", zap.Error(err))
 		}
 	}
 
+	// Stop MCP server
+	if err := mcpServer.Stop(); err != nil {
+		logger.Error("MCP server stop error", zap.Error(err))
+	}
+
 	logger.Info("Server stopped")
+}
+
+func printHelp() {
+	fmt.Printf(`swagger-mcp-go - Transform OpenAPI/Swagger specs into MCP servers
+
+Usage: swagger-mcp-go [OPTIONS]
+
+OPTIONS:
+  --swagger-file=FILE    Path to OpenAPI/Swagger specification file (required)
+  --config=FILE          Path to configuration file (optional)
+  --mode=MODE            Server mode: stdio, http, or sse (default: stdio)
+  --base-url=URL         Base URL for upstream API (overrides spec servers)
+  --version              Show version information
+  --help                 Show this help message
+
+MODES:
+  stdio                  Communicate via stdin/stdout (for Claude Desktop)
+  http                   Run HTTP server for MCP over HTTP
+  sse                    Run SSE server for MCP over Server-Sent Events
+
+EXAMPLES:
+  # Run in stdio mode (default, for Claude Desktop)
+  swagger-mcp-go --swagger-file=petstore.json
+
+  # Run HTTP server mode
+  swagger-mcp-go --swagger-file=petstore.json --mode=http
+
+  # Use custom base URL
+  swagger-mcp-go --swagger-file=petstore.json --base-url=https://api.example.com
+
+  # Use custom config
+  swagger-mcp-go --swagger-file=petstore.json --config=myconfig.yaml
+`)
 }
 
 func initLogger(cfg *config.Config) (*zap.Logger, error) {
