@@ -1,6 +1,6 @@
-# OpenAPI-driven MCP Server
+# Swagger MCP Go
 
-Transform any OpenAPI/Swagger definition into a fully-featured Model Context Protocol (MCP) server. The system dynamically parses OpenAPI specifications and converts endpoints into MCP tools that can be used with AI assistants like Claude Desktop.
+`swagger-mcp-go` is a Go-based server that transforms OpenAPI/Swagger specifications into Model Context Protocol (MCP) tools. It enables AI assistants like Claude to interact with any RESTful API defined by an OpenAPI spec, allowing dynamic and intelligent API calls.
 
 ## Features
 
