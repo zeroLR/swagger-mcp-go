@@ -310,7 +310,7 @@ func TestMCPEventMessage(t *testing.T) {
 
 func TestConfig(t *testing.T) {
 	logger := zap.NewNop()
-	
+
 	// Test with default config
 	emptyConfig := Config{}
 	hub := NewHub(emptyConfig, logger)

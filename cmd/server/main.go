@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
 
 	"github.com/zeroLR/swagger-mcp-go/internal/config"
 	"github.com/zeroLR/swagger-mcp-go/internal/mcp"
@@ -91,7 +91,7 @@ func main() {
 
 	// Initialize components
 	reg := registry.New(logger.Named("registry"))
-	
+
 	// Parse max size for fetcher
 	maxSize := int64(10 * 1024 * 1024) // 10MB default
 	fetcher := specs.New(logger.Named("specs"), cfg.Upstream.Timeout, maxSize)
@@ -240,7 +240,7 @@ func setupRouter(cfg *config.Config, logger *zap.Logger, reg *registry.Registry)
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"status": "healthy",
+			"status":    "healthy",
 			"timestamp": time.Now(),
 		})
 	})
@@ -352,7 +352,7 @@ func addSpecHandler(reg *registry.Registry, logger *zap.Logger) gin.HandlerFunc 
 func refreshSpecHandler(reg *registry.Registry, logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		_ = c.Param("service")
-		
+
 		// TODO: Implement spec refresh
 		c.JSON(http.StatusNotImplemented, gin.H{
 			"error": "Spec refresh not yet implemented in HTTP API",
@@ -363,7 +363,7 @@ func refreshSpecHandler(reg *registry.Registry, logger *zap.Logger) gin.HandlerF
 func removeSpecHandler(reg *registry.Registry) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		serviceName := c.Param("service")
-		
+
 		removed := reg.Remove(serviceName)
 		if !removed {
 			c.JSON(http.StatusNotFound, gin.H{

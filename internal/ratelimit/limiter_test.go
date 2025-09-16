@@ -11,12 +11,12 @@ import (
 
 func TestTokenBucketLimiter(t *testing.T) {
 	config := Config{
-		RequestsPerMinute: 60,  // 1 request per second
+		RequestsPerMinute: 60, // 1 request per second
 		BurstSize:         10,
 		WindowSize:        time.Minute,
 		KeyGenerator:      DefaultKeyGenerator,
 	}
-	
+
 	logger := zap.NewNop()
 	limiter := NewTokenBucketLimiter(config, logger)
 	defer limiter.Stop()
@@ -54,7 +54,7 @@ func TestSlidingWindowLimiter(t *testing.T) {
 		WindowSize:        time.Second, // 3 requests per second for testing
 		KeyGenerator:      DefaultKeyGenerator,
 	}
-	
+
 	logger := zap.NewNop()
 	limiter := NewSlidingWindowLimiter(config, logger)
 	defer limiter.Stop()
@@ -103,7 +103,7 @@ func TestManager(t *testing.T) {
 	}
 	limiter := NewTokenBucketLimiter(config, logger)
 	defer limiter.Stop()
-	
+
 	manager.SetServiceLimiter("test-service", limiter)
 
 	// Should allow first 2 requests
@@ -131,7 +131,7 @@ func TestManager(t *testing.T) {
 	}
 	globalLimiter := NewTokenBucketLimiter(globalConfig, logger)
 	defer globalLimiter.Stop()
-	
+
 	manager.SetGlobalLimiter(globalLimiter)
 
 	// Should use global limiter for unknown service
@@ -160,7 +160,7 @@ func TestManagerMiddleware(t *testing.T) {
 	}
 	limiter := NewTokenBucketLimiter(config, logger)
 	defer limiter.Stop()
-	
+
 	manager.SetServiceLimiter("test-service", limiter)
 
 	// Create test handler
@@ -176,7 +176,7 @@ func TestManagerMiddleware(t *testing.T) {
 	req1 := httptest.NewRequest("GET", "/test", nil)
 	req1.RemoteAddr = "192.168.1.1:8080"
 	recorder1 := httptest.NewRecorder()
-	
+
 	wrappedHandler.ServeHTTP(recorder1, req1)
 	if recorder1.Code != http.StatusOK {
 		t.Errorf("First request should succeed, got status %d", recorder1.Code)
@@ -186,7 +186,7 @@ func TestManagerMiddleware(t *testing.T) {
 	req2 := httptest.NewRequest("GET", "/test", nil)
 	req2.RemoteAddr = "192.168.1.1:8080"
 	recorder2 := httptest.NewRecorder()
-	
+
 	wrappedHandler.ServeHTTP(recorder2, req2)
 	if recorder2.Code != http.StatusTooManyRequests {
 		t.Errorf("Second request should be rate limited, got status %d", recorder2.Code)
@@ -205,7 +205,7 @@ func TestKeyGenerators(t *testing.T) {
 	// Test DefaultKeyGenerator
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
-	
+
 	key := DefaultKeyGenerator(req)
 	if key != "192.168.1.1:8080" {
 		t.Errorf("Expected key to be RemoteAddr, got %s", key)
@@ -239,12 +239,12 @@ func TestManagerStats(t *testing.T) {
 	}
 	limiter := NewTokenBucketLimiter(config, logger)
 	defer limiter.Stop()
-	
+
 	manager.SetServiceLimiter("test-service", limiter)
 	manager.SetGlobalLimiter(limiter)
 
 	stats := manager.GetStats()
-	
+
 	if !stats["enabled"].(bool) {
 		t.Errorf("Expected enabled to be true")
 	}

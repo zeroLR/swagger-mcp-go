@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"go.uber.org/zap"
 	"github.com/zeroLR/swagger-mcp-go/internal/models"
+	"go.uber.org/zap"
 )
 
 // Fetcher handles fetching and validating OpenAPI specifications

@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"go.uber.org/zap"
 	"github.com/zeroLR/swagger-mcp-go/internal/models"
+	"go.uber.org/zap"
 )
 
 func TestBasicAuthProvider(t *testing.T) {
@@ -104,7 +104,7 @@ func TestAPIKeyProvider(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest("GET", "/", nil)
-			
+
 			if tt.inQuery {
 				q := req.URL.Query()
 				q.Add("api_key", tt.apiKey)
@@ -301,7 +301,7 @@ func TestAuthMiddleware(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest("GET", "/", nil)
 			tt.setupReq(req)
-			
+
 			recorder := httptest.NewRecorder()
 			wrappedHandler.ServeHTTP(recorder, req)
 

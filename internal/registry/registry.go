@@ -5,25 +5,25 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
 	"github.com/zeroLR/swagger-mcp-go/internal/models"
+	"go.uber.org/zap"
 )
 
 // Registry manages OpenAPI specifications with TTL-based caching
 type Registry struct {
-	specs   map[string]*models.SpecInfo
-	mutex   sync.RWMutex
-	logger  *zap.Logger
-	events  chan SpecEvent
+	specs  map[string]*models.SpecInfo
+	mutex  sync.RWMutex
+	logger *zap.Logger
+	events chan SpecEvent
 }
 
 // SpecEvent represents a specification change event
 type SpecEvent struct {
-	Type        SpecEventType `json:"type"`
-	ServiceName string        `json:"serviceName"`
+	Type        SpecEventType    `json:"type"`
+	ServiceName string           `json:"serviceName"`
 	SpecInfo    *models.SpecInfo `json:"specInfo,omitempty"`
-	Error       string        `json:"error,omitempty"`
-	Timestamp   time.Time     `json:"timestamp"`
+	Error       string           `json:"error,omitempty"`
+	Timestamp   time.Time        `json:"timestamp"`
 }
 
 // SpecEventType represents the type of spec event

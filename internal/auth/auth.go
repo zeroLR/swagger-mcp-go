@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"go.uber.org/zap"
 	"github.com/zeroLR/swagger-mcp-go/internal/models"
+	"go.uber.org/zap"
 )
 
 // Provider interface for authentication providers

@@ -42,18 +42,18 @@ type RequestContext struct {
 
 // ResponseContext contains information about the response
 type ResponseContext struct {
-	StatusCode    int               `json:"statusCode"`
-	Headers       map[string]string `json:"headers"`
-	Body          []byte            `json:"body,omitempty"`
-	ResponseTime  time.Duration     `json:"responseTime"`
-	Error         error             `json:"error,omitempty"`
-	UpstreamURL   string            `json:"upstreamUrl"`
+	StatusCode   int               `json:"statusCode"`
+	Headers      map[string]string `json:"headers"`
+	Body         []byte            `json:"body,omitempty"`
+	ResponseTime time.Duration     `json:"responseTime"`
+	Error        error             `json:"error,omitempty"`
+	UpstreamURL  string            `json:"upstreamUrl"`
 }
 
 // HookContext contains both request and response context for hooks
 type HookContext struct {
-	Request  *RequestContext  `json:"request"`
-	Response *ResponseContext `json:"response,omitempty"`
+	Request  *RequestContext        `json:"request"`
+	Response *ResponseContext       `json:"response,omitempty"`
 	Metadata map[string]interface{} `json:"metadata"`
 }
 
@@ -91,10 +91,10 @@ func NewManager(logger *zap.Logger) *Manager {
 func (m *Manager) RegisterHook(hook Hook) {
 	hookType := hook.Type()
 	m.hooks[hookType] = append(m.hooks[hookType], hook)
-	
+
 	// Sort hooks by priority (highest first)
 	m.sortHooksByPriority(hookType)
-	
+
 	m.logger.Info("Registered hook",
 		zap.String("name", hook.Name()),
 		zap.String("type", string(hookType)),
@@ -119,12 +119,12 @@ func (m *Manager) ExecuteErrorHooks(ctx context.Context, hookCtx *HookContext) e
 // executeHooks executes all hooks of a given type
 func (m *Manager) executeHooks(ctx context.Context, hookType HookType, hookCtx *HookContext) error {
 	hooks := m.hooks[hookType]
-	
+
 	for _, hook := range hooks {
 		start := time.Now()
 		err := hook.Execute(ctx, hookCtx)
 		duration := time.Since(start)
-		
+
 		if err != nil {
 			m.logger.Error("Hook execution failed",
 				zap.String("hook", hook.Name()),
@@ -133,20 +133,20 @@ func (m *Manager) executeHooks(ctx context.Context, hookType HookType, hookCtx *
 				zap.Error(err))
 			return fmt.Errorf("hook %s failed: %w", hook.Name(), err)
 		}
-		
+
 		m.logger.Debug("Hook executed successfully",
 			zap.String("hook", hook.Name()),
 			zap.String("type", string(hookType)),
 			zap.Duration("duration", duration))
 	}
-	
+
 	return nil
 }
 
 // sortHooksByPriority sorts hooks by priority (highest first)
 func (m *Manager) sortHooksByPriority(hookType HookType) {
 	hooks := m.hooks[hookType]
-	
+
 	// Simple bubble sort by priority
 	for i := 0; i < len(hooks)-1; i++ {
 		for j := 0; j < len(hooks)-i-1; j++ {
@@ -240,7 +240,7 @@ func (h *MetricsHook) Execute(ctx context.Context, hookCtx *HookContext) error {
 			zap.String("operation", hookCtx.Request.OperationID),
 			zap.Int("statusCode", hookCtx.Response.StatusCode),
 			zap.Duration("responseTime", hookCtx.Response.ResponseTime))
-		
+
 		// TODO: Integrate with Prometheus metrics
 		// This would increment counters, update histograms, etc.
 	}
@@ -268,17 +268,17 @@ type SecurityHeadersHook struct {
 // NewSecurityHeadersHook creates a new security headers hook
 func NewSecurityHeadersHook(priority Priority, headers map[string]string) *SecurityHeadersHook {
 	defaultHeaders := map[string]string{
-		"X-Content-Type-Options": "nosniff",
-		"X-Frame-Options":        "DENY",
-		"X-XSS-Protection":       "1; mode=block",
+		"X-Content-Type-Options":    "nosniff",
+		"X-Frame-Options":           "DENY",
+		"X-XSS-Protection":          "1; mode=block",
 		"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
 	}
-	
+
 	// Merge custom headers with defaults
 	for k, v := range headers {
 		defaultHeaders[k] = v
 	}
-	
+
 	return &SecurityHeadersHook{
 		priority: priority,
 		headers:  defaultHeaders,
@@ -326,14 +326,14 @@ func (h *RequestValidationHook) Execute(ctx context.Context, hookCtx *HookContex
 	if hookCtx.Request.Parameters == nil {
 		return fmt.Errorf("missing request parameters")
 	}
-	
+
 	// Basic validation - check for required parameters
 	// TODO: Implement proper OpenAPI schema validation
 	h.logger.Debug("Validating request",
 		zap.String("service", hookCtx.Request.ServiceName),
 		zap.String("operation", hookCtx.Request.OperationID),
 		zap.Int("paramCount", len(hookCtx.Request.Parameters)))
-	
+
 	return nil
 }
 
@@ -372,7 +372,7 @@ func (h *ErrorHandlingHook) Execute(ctx context.Context, hookCtx *HookContext) e
 			zap.String("path", hookCtx.Request.Path),
 			zap.Error(hookCtx.Response.Error),
 			zap.Duration("responseTime", hookCtx.Response.ResponseTime))
-		
+
 		// TODO: Transform error response format
 		// This could standardize error responses across services
 	}
@@ -403,13 +403,13 @@ func (h *ContextHelper) NewHookContext(req *http.Request, serviceName, operation
 			headers[key] = values[0]
 		}
 	}
-	
+
 	// Extract query parameters
 	queryParams := make(map[string][]string)
 	for key, values := range req.URL.Query() {
 		queryParams[key] = values
 	}
-	
+
 	return &HookContext{
 		Request: &RequestContext{
 			ServiceName: serviceName,
@@ -433,7 +433,7 @@ func (h *ContextHelper) AddResponseContext(hookCtx *HookContext, statusCode int,
 			headers[key] = values[0]
 		}
 	}
-	
+
 	hookCtx.Response = &ResponseContext{
 		StatusCode:   statusCode,
 		Headers:      headers,

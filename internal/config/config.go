@@ -12,7 +12,7 @@ import (
 // Load reads configuration from file and environment variables
 func Load(configPath string) (*Config, error) {
 	viper.SetConfigType("yaml")
-	
+
 	if configPath != "" {
 		viper.SetConfigFile(configPath)
 	} else {

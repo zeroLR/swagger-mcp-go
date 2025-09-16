@@ -7,7 +7,6 @@ import (
 	"os"
 	"time"
 
-	"go.uber.org/zap"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -17,6 +16,7 @@ import (
 	"github.com/zeroLR/swagger-mcp-go/internal/proxy"
 	"github.com/zeroLR/swagger-mcp-go/internal/registry"
 	"github.com/zeroLR/swagger-mcp-go/internal/specs"
+	"go.uber.org/zap"
 )
 
 // ServerMode represents the MCP server mode
@@ -132,7 +132,7 @@ func (s *Server) registerToolsFromSpec(specInfo *models.SpecInfo, baseURL string
 	for _, route := range routes {
 		executor := s.proxyEngine.GetExecutor(&route)
 		handler := s.createToolHandler(&route, executor)
-		
+
 		s.mcpServer.AddTool(route.Tool, handler)
 		s.logger.Info("Registered MCP tool",
 			zap.String("name", route.Tool.Name),
@@ -278,7 +278,7 @@ func (s *Server) Stop() error {
 func (s *Server) loadSpecFile(specFile string) (*openapi3.T, error) {
 	loader := openapi3.NewLoader()
 	loader.IsExternalRefsAllowed = false // Security: disable external refs
-	
+
 	spec, err := loader.LoadFromFile(specFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load OpenAPI spec from file: %w", err)

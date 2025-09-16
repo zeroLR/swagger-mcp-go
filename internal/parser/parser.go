@@ -11,10 +11,10 @@ import (
 
 // Parser handles parsing OpenAPI specifications into MCP tools
 type Parser struct {
-	logger   *zap.Logger
-	baseURL  string
-	spec     *openapi3.T
-	routes   []RouteConfig
+	logger  *zap.Logger
+	baseURL string
+	spec    *openapi3.T
+	routes  []RouteConfig
 }
 
 // RouteConfig represents a parsed route from OpenAPI spec
@@ -73,7 +73,7 @@ func (p *Parser) ParseSpec(spec *openapi3.T) error {
 		}
 	}
 
-	p.logger.Info("Parsed OpenAPI specification", 
+	p.logger.Info("Parsed OpenAPI specification",
 		zap.Int("routeCount", len(p.routes)),
 		zap.String("title", spec.Info.Title),
 		zap.String("version", spec.Info.Version))
@@ -84,12 +84,12 @@ func (p *Parser) ParseSpec(spec *openapi3.T) error {
 // parsePath processes a single path and its operations
 func (p *Parser) parsePath(path string, pathItem *openapi3.PathItem) error {
 	operations := map[string]*openapi3.Operation{
-		"GET":    pathItem.Get,
-		"POST":   pathItem.Post,
-		"PUT":    pathItem.Put,
-		"DELETE": pathItem.Delete,
-		"PATCH":  pathItem.Patch,
-		"HEAD":   pathItem.Head,
+		"GET":     pathItem.Get,
+		"POST":    pathItem.Post,
+		"PUT":     pathItem.Put,
+		"DELETE":  pathItem.Delete,
+		"PATCH":   pathItem.Patch,
+		"HEAD":    pathItem.Head,
 		"OPTIONS": pathItem.Options,
 	}
 
@@ -100,9 +100,9 @@ func (p *Parser) parsePath(path string, pathItem *openapi3.PathItem) error {
 
 		route, err := p.parseOperation(path, method, operation, pathItem.Parameters)
 		if err != nil {
-			p.logger.Error("Failed to parse operation", 
-				zap.String("path", path), 
-				zap.String("method", method), 
+			p.logger.Error("Failed to parse operation",
+				zap.String("path", path),
+				zap.String("method", method),
 				zap.Error(err))
 			continue
 		}
@@ -315,7 +315,7 @@ func (p *Parser) generateOperationID(method, path string) string {
 	// Convert path to camelCase and remove special characters
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	var cleanParts []string
-	
+
 	for _, part := range parts {
 		// Remove path parameters (e.g., {id} -> id)
 		clean := strings.Trim(part, "{}")

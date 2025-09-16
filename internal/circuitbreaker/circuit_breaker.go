@@ -33,10 +33,10 @@ func (s State) String() string {
 
 // Config represents circuit breaker configuration
 type Config struct {
-	MaxFailures     int           `yaml:"maxFailures" json:"maxFailures"`
-	ResetTimeout    time.Duration `yaml:"resetTimeout" json:"resetTimeout"`
-	SuccessThreshold int          `yaml:"successThreshold" json:"successThreshold"`
-	Timeout         time.Duration `yaml:"timeout" json:"timeout"`
+	MaxFailures      int           `yaml:"maxFailures" json:"maxFailures"`
+	ResetTimeout     time.Duration `yaml:"resetTimeout" json:"resetTimeout"`
+	SuccessThreshold int           `yaml:"successThreshold" json:"successThreshold"`
+	Timeout          time.Duration `yaml:"timeout" json:"timeout"`
 }
 
 // ExecutorFunc represents a function that can be executed by the circuit breaker
@@ -47,22 +47,22 @@ type FallbackFunc func(ctx context.Context, err error) (interface{}, error)
 
 // CircuitBreaker implements the circuit breaker pattern
 type CircuitBreaker struct {
-	config           Config
-	state            State
-	failures         int
-	successes        int
-	lastFailureTime  time.Time
-	nextAttempt      time.Time
-	mutex            sync.RWMutex
-	logger           *zap.Logger
-	name             string
-	
+	config          Config
+	state           State
+	failures        int
+	successes       int
+	lastFailureTime time.Time
+	nextAttempt     time.Time
+	mutex           sync.RWMutex
+	logger          *zap.Logger
+	name            string
+
 	// Metrics
-	totalRequests     int64
-	totalFailures     int64
-	totalSuccesses    int64
-	totalTimeouts     int64
-	totalRejected     int64
+	totalRequests  int64
+	totalFailures  int64
+	totalSuccesses int64
+	totalTimeouts  int64
+	totalRejected  int64
 }
 
 // NewCircuitBreaker creates a new circuit breaker
@@ -98,7 +98,7 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, executor ExecutorFunc) (i
 func (cb *CircuitBreaker) ExecuteWithFallback(ctx context.Context, executor ExecutorFunc, fallback FallbackFunc) (interface{}, error) {
 	cb.mutex.Lock()
 	cb.totalRequests++
-	
+
 	state := cb.state
 	switch state {
 	case StateOpen:
@@ -116,11 +116,11 @@ func (cb *CircuitBreaker) ExecuteWithFallback(ctx context.Context, executor Exec
 		cb.logger.Info("Circuit breaker transitioning to half-open",
 			zap.String("name", cb.name))
 		fallthrough
-		
+
 	case StateHalfOpen:
 		// Allow limited requests through
 		cb.mutex.Unlock()
-		
+
 	case StateClosed:
 		// Normal operation
 		cb.mutex.Unlock()
@@ -141,20 +141,20 @@ func (cb *CircuitBreaker) ExecuteWithFallback(ctx context.Context, executor Exec
 		// Execution completed
 		cb.onResult(err)
 		return result, err
-		
+
 	case <-time.After(cb.config.Timeout):
 		// Execution timed out
 		cb.mutex.Lock()
 		cb.totalTimeouts++
 		cb.mutex.Unlock()
 		cb.onResult(fmt.Errorf("execution timeout"))
-		
+
 		timeoutErr := fmt.Errorf("circuit breaker '%s' execution timeout", cb.name)
 		if fallback != nil {
 			return fallback(ctx, timeoutErr)
 		}
 		return nil, timeoutErr
-		
+
 	case <-ctx.Done():
 		// Context cancelled
 		cb.onResult(ctx.Err())
@@ -194,7 +194,7 @@ func (cb *CircuitBreaker) onFailure() {
 // onSuccess handles a successful execution
 func (cb *CircuitBreaker) onSuccess() {
 	cb.totalSuccesses++
-	
+
 	switch cb.state {
 	case StateClosed:
 		cb.failures = 0
@@ -210,7 +210,7 @@ func (cb *CircuitBreaker) onSuccess() {
 func (cb *CircuitBreaker) setState(state State) {
 	oldState := cb.state
 	cb.state = state
-	
+
 	switch state {
 	case StateOpen:
 		cb.nextAttempt = time.Now().Add(cb.config.ResetTimeout)
@@ -228,7 +228,7 @@ func (cb *CircuitBreaker) setState(state State) {
 		cb.logger.Info("Circuit breaker half-open",
 			zap.String("name", cb.name))
 	}
-	
+
 	if oldState != state {
 		cb.logger.Info("Circuit breaker state changed",
 			zap.String("name", cb.name),
@@ -250,18 +250,18 @@ func (cb *CircuitBreaker) GetStats() map[string]interface{} {
 	defer cb.mutex.RUnlock()
 
 	return map[string]interface{}{
-		"name":              cb.name,
-		"state":             cb.state.String(),
-		"failures":          cb.failures,
-		"successes":         cb.successes,
-		"totalRequests":     cb.totalRequests,
-		"totalFailures":     cb.totalFailures,
-		"totalSuccesses":    cb.totalSuccesses,
-		"totalTimeouts":     cb.totalTimeouts,
-		"totalRejected":     cb.totalRejected,
-		"lastFailureTime":   cb.lastFailureTime,
-		"nextAttempt":       cb.nextAttempt,
-		"config":            cb.config,
+		"name":            cb.name,
+		"state":           cb.state.String(),
+		"failures":        cb.failures,
+		"successes":       cb.successes,
+		"totalRequests":   cb.totalRequests,
+		"totalFailures":   cb.totalFailures,
+		"totalSuccesses":  cb.totalSuccesses,
+		"totalTimeouts":   cb.totalTimeouts,
+		"totalRejected":   cb.totalRejected,
+		"lastFailureTime": cb.lastFailureTime,
+		"nextAttempt":     cb.nextAttempt,
+		"config":          cb.config,
 	}
 }
 
@@ -269,7 +269,7 @@ func (cb *CircuitBreaker) GetStats() map[string]interface{} {
 func (cb *CircuitBreaker) Reset() {
 	cb.mutex.Lock()
 	defer cb.mutex.Unlock()
-	
+
 	cb.setState(StateClosed)
 	cb.logger.Info("Circuit breaker manually reset", zap.String("name", cb.name))
 }
@@ -302,12 +302,12 @@ func (m *Manager) GetOrCreate(name string, config Config) *CircuitBreaker {
 
 	breaker := NewCircuitBreaker(name, config, m.logger.Named("cb"))
 	m.breakers[name] = breaker
-	
+
 	m.logger.Info("Created circuit breaker",
 		zap.String("name", name),
 		zap.Int("maxFailures", config.MaxFailures),
 		zap.Duration("resetTimeout", config.ResetTimeout))
-	
+
 	return breaker
 }
 
@@ -335,7 +335,7 @@ func (m *Manager) ExecuteWithFallback(name string, config Config, ctx context.Co
 func (m *Manager) GetBreaker(name string) (*CircuitBreaker, bool) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	breaker, exists := m.breakers[name]
 	return breaker, exists
 }
@@ -344,7 +344,7 @@ func (m *Manager) GetBreaker(name string) (*CircuitBreaker, bool) {
 func (m *Manager) ListBreakers() []string {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	names := make([]string, 0, len(m.breakers))
 	for name := range m.breakers {
 		names = append(names, name)
@@ -378,7 +378,7 @@ func (m *Manager) ResetAll() {
 	for _, breaker := range m.breakers {
 		breaker.Reset()
 	}
-	
+
 	m.logger.Info("All circuit breakers reset")
 }
 

@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
 	"github.com/getkin/kin-openapi/openapi3"
-	
+	"go.uber.org/zap"
+
 	"github.com/zeroLR/swagger-mcp-go/internal/models"
 	"github.com/zeroLR/swagger-mcp-go/internal/registry"
 )

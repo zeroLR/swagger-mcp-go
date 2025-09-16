@@ -34,10 +34,10 @@ type KeyGenerator func(*http.Request) string
 
 // TokenBucketLimiter implements token bucket algorithm
 type TokenBucketLimiter struct {
-	config    Config
-	buckets   map[string]*bucket
-	mutex     sync.RWMutex
-	logger    *zap.Logger
+	config        Config
+	buckets       map[string]*bucket
+	mutex         sync.RWMutex
+	logger        *zap.Logger
 	cleanupTicker *time.Ticker
 	stopCleanup   chan struct{}
 }
@@ -97,7 +97,7 @@ func (l *TokenBucketLimiter) Allow(key string) (bool, time.Duration) {
 
 	now := time.Now()
 	elapsed := now.Sub(b.lastRefill)
-	
+
 	// Calculate tokens to add based on elapsed time
 	tokensToAdd := elapsed.Seconds() * (float64(l.config.RequestsPerMinute) / l.config.WindowSize.Seconds())
 	b.tokens = min(float64(l.config.BurstSize), b.tokens+tokensToAdd)
@@ -166,10 +166,10 @@ func (l *TokenBucketLimiter) cleanup() {
 
 // SlidingWindowLimiter implements sliding window algorithm
 type SlidingWindowLimiter struct {
-	config  Config
-	windows map[string]*window
-	mutex   sync.RWMutex
-	logger  *zap.Logger
+	config        Config
+	windows       map[string]*window
+	mutex         sync.RWMutex
+	logger        *zap.Logger
 	cleanupTicker *time.Ticker
 	stopCleanup   chan struct{}
 }
@@ -370,9 +370,9 @@ func (m *Manager) GetStats() map[string]interface{} {
 	defer m.mutex.RUnlock()
 
 	stats := map[string]interface{}{
-		"enabled":        m.enabled,
+		"enabled":         m.enabled,
 		"serviceLimiters": len(m.limiters),
-		"limiters":       make(map[string]interface{}),
+		"limiters":        make(map[string]interface{}),
 	}
 
 	for serviceName, limiter := range m.limiters {

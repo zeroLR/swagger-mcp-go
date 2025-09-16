@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
 	"github.com/zeroLR/swagger-mcp-go/internal/hooks"
+	"go.uber.org/zap"
 )
 
 // PluginType represents the type of plugin
@@ -159,11 +159,11 @@ type IntegrationPlugin interface {
 
 // Registry manages plugins
 type Registry struct {
-	plugins     map[string]Plugin
+	plugins       map[string]Plugin
 	pluginsByType map[PluginType][]Plugin
-	mutex       sync.RWMutex
-	logger      *zap.Logger
-	hookManager *hooks.Manager
+	mutex         sync.RWMutex
+	logger        *zap.Logger
+	hookManager   *hooks.Manager
 }
 
 // NewRegistry creates a new plugin registry
@@ -234,7 +234,7 @@ func (r *Registry) GetByType(pluginType PluginType) []Plugin {
 func (r *Registry) List() []Plugin {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
-	
+
 	plugins := make([]Plugin, 0, len(r.plugins))
 	for _, plugin := range r.plugins {
 		plugins = append(plugins, plugin)
@@ -441,7 +441,7 @@ func (p *ExampleAuthPlugin) Description() string { return p.description }
 
 func (p *ExampleAuthPlugin) Initialize(config map[string]interface{}) error {
 	p.config = config
-	
+
 	// Load users from config
 	if users, ok := config["users"].(map[string]interface{}); ok {
 		for username, password := range users {
@@ -450,7 +450,7 @@ func (p *ExampleAuthPlugin) Initialize(config map[string]interface{}) error {
 			}
 		}
 	}
-	
+
 	p.logger.Info("Initialized with users", zap.Int("userCount", len(p.users)))
 	return nil
 }
@@ -545,7 +545,7 @@ func (p *ExampleTransformPlugin) TransformRequest(ctx context.Context, req *Tran
 	}
 	req.Headers["X-Transform-Plugin"] = "example-transform"
 	req.Headers["X-Request-ID"] = fmt.Sprintf("req-%d", time.Now().UnixNano())
-	
+
 	p.logger.Debug("Transformed request", zap.String("service", req.ServiceName))
 	return req, nil
 }
@@ -557,7 +557,7 @@ func (p *ExampleTransformPlugin) TransformResponse(ctx context.Context, resp *Tr
 	}
 	resp.Headers["X-Response-Transformed"] = "true"
 	resp.Headers["X-Transform-Time"] = fmt.Sprintf("%d", time.Now().Unix())
-	
+
 	p.logger.Debug("Transformed response", zap.Int("statusCode", resp.StatusCode))
 	return resp, nil
 }

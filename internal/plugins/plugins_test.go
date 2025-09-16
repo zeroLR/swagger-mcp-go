@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"go.uber.org/zap"
 	"github.com/zeroLR/swagger-mcp-go/internal/hooks"
+	"go.uber.org/zap"
 )
 
 func TestRegistry_BasicOperations(t *testing.T) {

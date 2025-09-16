@@ -33,25 +33,25 @@ type Message struct {
 
 // MessageType constants
 const (
-	MessageTypeRequest    = "request"
-	MessageTypeResponse   = "response"
-	MessageTypeError      = "error"
-	MessageTypeEvent      = "event"
-	MessageTypePing       = "ping"
-	MessageTypePong       = "pong"
-	MessageTypeSubscribe  = "subscribe"
+	MessageTypeRequest     = "request"
+	MessageTypeResponse    = "response"
+	MessageTypeError       = "error"
+	MessageTypeEvent       = "event"
+	MessageTypePing        = "ping"
+	MessageTypePong        = "pong"
+	MessageTypeSubscribe   = "subscribe"
 	MessageTypeUnsubscribe = "unsubscribe"
 )
 
 // Client represents a WebSocket client connection
 type Client struct {
-	ID           string
-	conn         *websocket.Conn
-	send         chan Message
-	hub          *Hub
+	ID            string
+	conn          *websocket.Conn
+	send          chan Message
+	hub           *Hub
 	subscriptions map[string]bool
-	mutex        sync.RWMutex
-	logger       *zap.Logger
+	mutex         sync.RWMutex
+	logger        *zap.Logger
 }
 
 // NewClient creates a new WebSocket client

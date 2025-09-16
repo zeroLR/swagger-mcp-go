@@ -18,24 +18,24 @@ const (
 
 // SpecInfo holds information about a registered OpenAPI specification
 type SpecInfo struct {
-	ID          string                `json:"id"`
-	ServiceName string                `json:"serviceName"`
-	URL         string                `json:"url"`
-	Spec        *openapi3.T          `json:"spec"`
-	FetchedAt   time.Time            `json:"fetchedAt"`
-	TTL         time.Duration        `json:"ttl"`
-	Headers     map[string]string    `json:"headers"`
-	AuthPolicy  *AuthPolicy          `json:"authPolicy,omitempty"`
+	ID          string            `json:"id"`
+	ServiceName string            `json:"serviceName"`
+	URL         string            `json:"url"`
+	Spec        *openapi3.T       `json:"spec"`
+	FetchedAt   time.Time         `json:"fetchedAt"`
+	TTL         time.Duration     `json:"ttl"`
+	Headers     map[string]string `json:"headers"`
+	AuthPolicy  *AuthPolicy       `json:"authPolicy,omitempty"`
 }
 
 // ProxyRequest represents an incoming request to be proxied
 type ProxyRequest struct {
-	Method      string                `json:"method"`
-	Path        string                `json:"path"`
-	Headers     map[string]string     `json:"headers"`
-	Body        []byte                `json:"body,omitempty"`
-	ServiceName string                `json:"serviceName"`
-	Operation   *openapi3.Operation   `json:"operation"`
+	Method      string              `json:"method"`
+	Path        string              `json:"path"`
+	Headers     map[string]string   `json:"headers"`
+	Body        []byte              `json:"body,omitempty"`
+	ServiceName string              `json:"serviceName"`
+	Operation   *openapi3.Operation `json:"operation"`
 }
 
 // AuthPolicy defines authentication requirements for a service
@@ -48,24 +48,24 @@ type AuthPolicy struct {
 
 // RouteInfo provides information about registered routes
 type RouteInfo struct {
-	Path        string    `json:"path"`
-	Method      string    `json:"method"`
-	ServiceName string    `json:"serviceName"`
-	OperationID string    `json:"operationId,omitempty"`
-	Summary     string    `json:"summary,omitempty"`
-	Tags        []string  `json:"tags,omitempty"`
+	Path        string   `json:"path"`
+	Method      string   `json:"method"`
+	ServiceName string   `json:"serviceName"`
+	OperationID string   `json:"operationId,omitempty"`
+	Summary     string   `json:"summary,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
 }
 
 // ServiceStats contains performance and usage statistics
 type ServiceStats struct {
-	ServiceName     string        `json:"serviceName,omitempty"`
-	RequestCount    int64         `json:"requestCount"`
-	ErrorCount      int64         `json:"errorCount"`
-	AverageLatency  time.Duration `json:"averageLatency"`
-	LastRequest     time.Time     `json:"lastRequest"`
-	SpecFetchedAt   time.Time     `json:"specFetchedAt"`
-	SpecURL         string        `json:"specUrl"`
-	RouteCount      int           `json:"routeCount"`
+	ServiceName    string        `json:"serviceName,omitempty"`
+	RequestCount   int64         `json:"requestCount"`
+	ErrorCount     int64         `json:"errorCount"`
+	AverageLatency time.Duration `json:"averageLatency"`
+	LastRequest    time.Time     `json:"lastRequest"`
+	SpecFetchedAt  time.Time     `json:"specFetchedAt"`
+	SpecURL        string        `json:"specUrl"`
+	RouteCount     int           `json:"routeCount"`
 }
 
 // MCPToolRequest represents an MCP tool invocation

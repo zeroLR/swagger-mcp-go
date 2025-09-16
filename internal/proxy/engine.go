@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/zap"
 	"github.com/zeroLR/swagger-mcp-go/internal/parser"
+	"go.uber.org/zap"
 )
 
 // Engine handles proxying requests to upstream APIs
@@ -36,7 +36,7 @@ func New(logger *zap.Logger, timeout time.Duration) *Engine {
 		client: &http.Client{
 			Timeout: timeout,
 		},
-		logger: logger,
+		logger:  logger,
 		headers: make(map[string]string),
 	}
 }
