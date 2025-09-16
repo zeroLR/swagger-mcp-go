@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  swagger-mcp-go:
+    build: .
+    ports:
+      - "8080:8080"  # HTTP server
+      - "8081:8081"  # MCP server
+    volumes:
+      - ./examples:/examples:ro
+      - ./configs:/configs:ro
+    environment:
+      - LOG_LEVEL=info
+    command: >
+      --swagger-file=/examples/petstore.json
+      --mode=http
+      --base-url=https://petstore.swagger.io/v2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

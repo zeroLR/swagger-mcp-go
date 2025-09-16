@@ -1,23 +1,21 @@
-# OpenAPI-driven Proxy Server with MCP Integration
+# OpenAPI-driven MCP Server
 
-A dynamic OpenAPI-driven proxy server that operates as a Model Context Protocol (MCP) server. The system dynamically imports remote Swagger/OpenAPI specifications by URL, registers proxied routes with customizable headers, supports Server-Sent Events (SSE) pass-through, and exposes management capabilities through both HTTP Admin APIs and MCP tools.
+Transform any OpenAPI/Swagger definition into a fully-featured Model Context Protocol (MCP) server. The system dynamically parses OpenAPI specifications and converts endpoints into MCP tools that can be used with AI assistants like Claude Desktop.
 
 ## Features
 
-- 🚀 **Dynamic OpenAPI Import**: Fetch and register specs from remote URLs
+- 🚀 **Dynamic OpenAPI Import**: Parse local OpenAPI/Swagger files and convert to MCP tools
 - 🔄 **Intelligent Proxying**: Route requests based on OpenAPI specifications  
-- 🔗 **MCP Integration**: Remote management via Model Context Protocol
-- 📊 **Observability**: Prometheus metrics, structured logging, tracing support
-- 🔐 **Security**: Pluggable authentication (Basic, Bearer JWT, OAuth2)
-- 🔧 **Extensibility**: Hook system for custom processing
-- ⚡ **Performance**: In-memory caching with TTL, circuit breakers, retries
+- 🔗 **MCP Integration**: Full Model Context Protocol implementation
+- 📊 **Multiple Transport Modes**: Support for stdio, HTTP, and SSE
+- 🔧 **Command Line Interface**: Easy-to-use CLI with flexible configuration
+- ⚡ **Real-time Processing**: Live conversion of API endpoints to MCP tools
 
 ## Quick Start
 
 ### Prerequisites
-- Go 1.22+
-- Optional: Prometheus for metrics collection
-- Optional: Jaeger for tracing
+- Go 1.24+
+- OpenAPI/Swagger specification file (JSON or YAML)
 
 ### Installation
 
@@ -28,14 +26,97 @@ cd swagger-mcp-go
 
 # Build the application
 go build -o bin/swagger-mcp-go ./cmd/server
-
-# Run the server
-./bin/swagger-mcp-go
 ```
 
-### Configuration
+### Basic Usage
 
-Create a `config.yaml` file or use the provided example in `configs/config.yaml`:
+```bash
+# Show help
+./bin/swagger-mcp-go --help
+
+# Run with OpenAPI spec (stdio mode for Claude Desktop)
+./bin/swagger-mcp-go --swagger-file=examples/petstore.json
+
+# Run HTTP server mode
+./bin/swagger-mcp-go --swagger-file=examples/petstore.json --mode=http
+
+# Use custom base URL for API calls
+./bin/swagger-mcp-go --swagger-file=examples/petstore.json --base-url=https://api.example.com
+```
+
+## Transport Modes
+
+### STDIO Mode (Default)
+Perfect for Claude Desktop integration. Communicates via stdin/stdout using JSON-RPC.
+
+```bash
+./bin/swagger-mcp-go --swagger-file=petstore.json
+```
+
+### HTTP Mode
+Runs an HTTP server for MCP over HTTP transport.
+
+```bash
+./bin/swagger-mcp-go --swagger-file=petstore.json --mode=http
+```
+
+### SSE Mode  
+Runs a Server-Sent Events server for real-time MCP communication.
+
+```bash
+./bin/swagger-mcp-go --swagger-file=petstore.json --mode=sse
+```
+
+## Claude Desktop Integration
+
+Add the following to your Claude Desktop MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "petstore-api": {
+      "command": "/path/to/swagger-mcp-go",
+      "args": [
+        "--swagger-file=/path/to/petstore.json",
+        "--base-url=https://petstore.swagger.io/v2"
+      ]
+    }
+  }
+}
+```
+
+## How It Works
+
+1. **Parse OpenAPI Spec**: Reads your OpenAPI/Swagger specification
+2. **Generate MCP Tools**: Converts each API endpoint into an MCP tool
+3. **Handle Requests**: Proxies tool calls to your actual API endpoints
+4. **Return Results**: Formats responses for the AI assistant
+
+### Example Transformation
+
+Given this OpenAPI endpoint:
+```yaml
+paths:
+  /pet/{petId}:
+    get:
+      operationId: getPetById
+      summary: Find pet by ID
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema:
+            type: integer
+```
+
+Creates this MCP tool:
+- **Name**: `getPetById`
+- **Description**: "Find pet by ID"
+- **Parameters**: `petId` (integer, required)
+
+## Configuration
+
+Create a `config.yaml` file for advanced configuration:
 
 ```yaml
 server:
@@ -53,55 +134,47 @@ logging:
   level: "info"
   format: "json"
 
-metrics:
-  enabled: true
-  path: "/metrics"
+upstream:
+  timeout: 30s
+  retryCount: 3
+  retryDelay: 1s
 ```
 
-## Usage
+## Command Line Options
 
-### Health Check
+```
+Usage: swagger-mcp-go [OPTIONS]
+
+OPTIONS:
+  --swagger-file=FILE    Path to OpenAPI/Swagger specification file (required)
+  --config=FILE          Path to configuration file (optional)
+  --mode=MODE            Server mode: stdio, http, or sse (default: stdio)
+  --base-url=URL         Base URL for upstream API (overrides spec servers)
+  --version              Show version information
+  --help                 Show this help message
+```
+
+## Examples
+
+### Pet Store API
+The repository includes a sample Pet Store OpenAPI specification:
 
 ```bash
-curl http://localhost:8080/health
+./bin/swagger-mcp-go --swagger-file=examples/petstore.json --base-url=https://petstore.swagger.io/v2
 ```
 
-### Admin API
+This creates the following MCP tools:
+- `addPet` - Add a new pet to the store
+- `findPetsByStatus` - Find pets by status
+- `getPetById` - Get a pet by ID
+- `deletePet` - Delete a pet
 
-#### List Specifications
+### Custom API
+Use your own OpenAPI specification:
+
 ```bash
-curl http://localhost:8080/admin/specs
+./bin/swagger-mcp-go --swagger-file=my-api.json --base-url=https://my-api.com/v1
 ```
-
-#### Get Statistics
-```bash
-curl http://localhost:8080/admin/stats
-```
-
-#### Remove Specification
-```bash
-curl -X DELETE http://localhost:8080/admin/specs/my-service
-```
-
-### Metrics
-
-Prometheus metrics are available at:
-```bash
-curl http://localhost:8080/metrics
-```
-
-### MCP Integration
-
-The server exposes MCP tools for remote management:
-
-- `listSpecs` - List all registered OpenAPI specifications
-- `addSpec` - Add a new specification from URL
-- `refreshSpec` - Force refresh of an existing specification  
-- `removeSpec` - Remove a specification
-- `inspectRoute` - Inspect route configuration
-- `getStats` - Get performance statistics
-- `enableAuthPolicy` - Enable authentication for a service
-- `disableAuthPolicy` - Disable authentication for a service
 
 ## Project Structure
 
@@ -109,64 +182,15 @@ The server exposes MCP tools for remote management:
 .
 ├── cmd/server/           # Main application entry point
 ├── internal/
-│   ├── auth/            # Authentication providers
 │   ├── config/          # Configuration management
-│   ├── handlers/        # HTTP handlers
 │   ├── mcp/             # MCP server implementation
-│   ├── middleware/      # HTTP middleware
 │   ├── models/          # Data models
-│   ├── proxy/           # Proxy engine
+│   ├── parser/          # OpenAPI specification parser
+│   ├── proxy/           # HTTP proxy engine
 │   ├── registry/        # Specification registry
-│   ├── specs/           # Specification fetcher
-│   └── upstream/        # Upstream client
-├── pkg/
-│   ├── health/          # Health checks
-│   ├── hooks/           # Extension hooks
-│   ├── metrics/         # Metrics collection
-│   └── tracing/         # Distributed tracing
-├── configs/             # Configuration files
-├── docs/                # Documentation
-└── examples/            # Usage examples
-```
-
-## Architecture
-
-The system is built with a modular architecture:
-
-- **SpecFetcher**: Fetches and validates OpenAPI specs from URLs
-- **SpecRegistry**: In-memory cache with TTL management
-- **RouteBinder**: Dynamic route registration from specs
-- **ProxyEngine**: Request forwarding with customization
-- **MCPServerAdapter**: MCP protocol implementation
-- **AdminAPI**: HTTP management interface
-
-For detailed architecture information, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
-## Development
-
-### Building
-
-```bash
-go build -o bin/swagger-mcp-go ./cmd/server
-```
-
-### Testing
-
-```bash
-go test ./...
-```
-
-### Running with Development Config
-
-```bash
-# Copy example config
-cp configs/config.yaml config.yaml
-
-# Edit configuration as needed
-vim config.yaml
-
-# Run server
-go run ./cmd/server
+│   └── specs/           # Specification fetcher
+├── examples/            # Example OpenAPI specifications
+└── configs/             # Configuration files
 ```
 
 ## Contributing
@@ -183,13 +207,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Roadmap
 
-- [ ] Complete MCP tool implementations
-- [ ] Add dynamic route binding from OpenAPI specs
-- [ ] Implement authentication providers
-- [ ] Add request/response transformation hooks
-- [ ] Circuit breaker and retry mechanisms
-- [ ] OpenTelemetry tracing integration
-- [ ] Rate limiting support
-- [ ] WebSocket and SSE pass-through
+- [x] Core OpenAPI to MCP transformation
+- [x] Multiple transport modes (stdio, http, sse)
+- [x] Command-line interface
+- [x] Basic proxy functionality
+- [ ] Authentication support (Bearer, API Key, OAuth2)
+- [ ] Request/response transformation hooks
+- [ ] Rate limiting and circuit breakers
+- [ ] WebSocket support
 - [ ] Plugin system for custom extensions
+- [ ] Docker containerization
 - [ ] Kubernetes deployment manifests

@@ -1,0 +1,226 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "JSON Placeholder API",
+    "description": "A fake REST API for testing and prototyping",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://jsonplaceholder.typicode.com"
+    }
+  ],
+  "paths": {
+    "/posts": {
+      "get": {
+        "operationId": "getPosts",
+        "summary": "Get all posts",
+        "description": "Retrieves a list of all posts",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Filter posts by user ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of posts"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPost",
+        "summary": "Create a new post",
+        "description": "Creates a new post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "description": "Post title"
+                  },
+                  "body": {
+                    "type": "string",
+                    "description": "Post content"
+                  },
+                  "userId": {
+                    "type": "integer",
+                    "description": "Author user ID"
+                  }
+                },
+                "required": ["title", "body", "userId"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Post created successfully"
+          }
+        }
+      }
+    },
+    "/posts/{id}": {
+      "get": {
+        "operationId": "getPostById",
+        "summary": "Get post by ID",
+        "description": "Retrieves a specific post by its ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Post ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Post details"
+          },
+          "404": {
+            "description": "Post not found"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updatePost",
+        "summary": "Update a post",
+        "description": "Updates an existing post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Post ID to update"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "description": "Post title"
+                  },
+                  "body": {
+                    "type": "string",
+                    "description": "Post content"
+                  },
+                  "userId": {
+                    "type": "integer",
+                    "description": "Author user ID"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Post updated successfully"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePost",
+        "summary": "Delete a post",
+        "description": "Deletes a post by ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Post ID to delete"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Post deleted successfully"
+          }
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "operationId": "getUsers",
+        "summary": "Get all users",
+        "description": "Retrieves a list of all users",
+        "responses": {
+          "200": {
+            "description": "List of users"
+          }
+        }
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "operationId": "getUserById",
+        "summary": "Get user by ID",
+        "description": "Retrieves a specific user by their ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "User ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User details"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/comments": {
+      "get": {
+        "operationId": "getComments",
+        "summary": "Get all comments",
+        "description": "Retrieves a list of comments, optionally filtered by post",
+        "parameters": [
+          {
+            "name": "postId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Filter comments by post ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of comments"
+          }
+        }
+      }
+    }
+  }
+}
