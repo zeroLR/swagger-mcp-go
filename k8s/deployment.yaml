@@ -1,0 +1,141 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: swagger-mcp-go
+  namespace: swagger-mcp-go
+  labels:
+    app: swagger-mcp-go
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: swagger-mcp-go
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: swagger-mcp-go
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      containers:
+      - name: swagger-mcp-go
+        image: swagger-mcp-go:latest
+        imagePullPolicy: IfNotPresent
+        args:
+          - "--swagger-file=/examples/petstore.json"
+          - "--mode=http"
+          - "--base-url=https://petstore.swagger.io/v2"
+          - "--config=/config/config.yaml"
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: mcp
+          containerPort: 8081
+          protocol: TCP
+        env:
+        - name: LOG_LEVEL
+          value: "info"
+        - name: SWAGGER_MCP_GO_LOGGING_FORMAT
+          value: "json"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /config
+          readOnly: true
+        - name: examples-volume
+          mountPath: /examples
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "250m"
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: config-volume
+        configMap:
+          name: swagger-mcp-go-config
+      - name: examples-volume
+        configMap:
+          name: swagger-mcp-go-examples
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: swagger-mcp-go-service
+  namespace: swagger-mcp-go
+  labels:
+    app: swagger-mcp-go
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+    protocol: TCP
+  - name: mcp
+    port: 8081
+    targetPort: mcp
+    protocol: TCP
+  selector:
+    app: swagger-mcp-go
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: swagger-mcp-go-ingress
+  namespace: swagger-mcp-go
+  labels:
+    app: swagger-mcp-go
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+spec:
+  rules:
+  - host: swagger-mcp-go.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: swagger-mcp-go-service
+            port:
+              number: 8080

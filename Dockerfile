@@ -1,41 +1,44 @@
 # syntax=docker/dockerfile:1
 
+# Build stage
 FROM golang:1.24-alpine AS builder
 
 # Set working directory
 WORKDIR /app
 
-# Copy go mod files
+# Copy go mod files first for better caching
 COPY go.mod go.sum ./
 
 # Download dependencies
-RUN go mod download
+RUN go mod download && go mod verify
 
 # Copy source code
 COPY . .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o swagger-mcp-go ./cmd/server
+# Build the application with optimizations
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags='-w -s -extldflags "-static"' \
+    -a -installsuffix cgo \
+    -o swagger-mcp-go ./cmd/server
 
-# Final stage
-FROM alpine:latest
+# Verify the binary
+RUN ./swagger-mcp-go --version
 
-# Install ca-certificates for HTTPS requests
-RUN apk --no-cache add ca-certificates
-
-WORKDIR /root/
+# Final stage - distroless for better security and smaller size
+FROM gcr.io/distroless/static-debian12:nonroot
 
 # Copy the binary from builder stage
-COPY --from=builder /app/swagger-mcp-go .
+COPY --from=builder /app/swagger-mcp-go /usr/local/bin/swagger-mcp-go
 
-# Copy example configs and specs
-COPY --from=builder /app/configs/ ./configs/
-COPY --from=builder /app/examples/ ./examples/
+# Copy configuration and example files
+COPY --from=builder /app/configs/ /configs/
+COPY --from=builder /app/examples/ /examples/
 
-# Create a non-root user
-RUN adduser -D -s /bin/sh appuser
-USER appuser
+# Expose ports
+EXPOSE 8080 8081
+
+# Health check (distroless doesn't support HEALTHCHECK)
 
 # Default command
-ENTRYPOINT ["./swagger-mcp-go"]
+ENTRYPOINT ["/usr/local/bin/swagger-mcp-go"]
 CMD ["--help"]
