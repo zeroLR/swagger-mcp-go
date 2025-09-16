@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ServiceMonitor
+metadata:
+  name: swagger-mcp-go-metrics
+  namespace: swagger-mcp-go
+  labels:
+    app: swagger-mcp-go
+spec:
+  selector:
+    matchLabels:
+      app: swagger-mcp-go
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: swagger-mcp-go-alerts
+  namespace: swagger-mcp-go
+  labels:
+    app: swagger-mcp-go
+spec:
+  groups:
+  - name: swagger-mcp-go.rules
+    rules:
+    - alert: SwaggerMcpGoDown
+      expr: up{job="swagger-mcp-go"} == 0
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Swagger MCP Go instance is down"
+        description: "Swagger MCP Go instance {{ $labels.instance }} has been down for more than 5 minutes."
+    
+    - alert: SwaggerMcpGoHighErrorRate
+      expr: rate(http_requests_total{job="swagger-mcp-go",status=~"5.."}[5m]) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High error rate in Swagger MCP Go"
+        description: "Swagger MCP Go instance {{ $labels.instance }} has error rate above 10% for more than 5 minutes."
+    
+    - alert: SwaggerMcpGoHighLatency
+      expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="swagger-mcp-go"}[5m])) > 1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High latency in Swagger MCP Go"
+        description: "Swagger MCP Go instance {{ $labels.instance }} has 95th percentile latency above 1s for more than 5 minutes."
+    
+    - alert: SwaggerMcpGoCircuitBreakerOpen
+      expr: circuit_breaker_state{job="swagger-mcp-go"} == 2
+      for: 1m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Circuit breaker is open"
+        description: "Circuit breaker {{ $labels.name }} in Swagger MCP Go instance {{ $labels.instance }} is open."

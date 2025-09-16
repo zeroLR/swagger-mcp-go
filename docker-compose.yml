@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # Main application in HTTP mode
   swagger-mcp-go:
     build: .
     ports:
@@ -11,13 +12,127 @@ services:
       - ./configs:/configs:ro
     environment:
       - LOG_LEVEL=info
+      - SWAGGER_MCP_GO_LOGGING_FORMAT=json
     command: >
       --swagger-file=/examples/petstore.json
       --mode=http
       --base-url=https://petstore.swagger.io/v2
+      --config=/configs/config.yaml
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
+    networks:
+      - swagger-mcp
+
+  # Secondary instance with different OpenAPI spec
+  swagger-mcp-go-jsonplaceholder:
+    build: .
+    ports:
+      - "8082:8080"  # HTTP server
+      - "8083:8081"  # MCP server
+    volumes:
+      - ./examples:/examples:ro
+      - ./configs:/configs:ro
+    environment:
+      - LOG_LEVEL=debug
+      - SWAGGER_MCP_GO_LOGGING_FORMAT=console
+    command: >
+      --swagger-file=/examples/jsonplaceholder.json
+      --mode=http
+      --base-url=https://jsonplaceholder.typicode.com
+    restart: unless-stopped
+    depends_on:
+      - swagger-mcp-go
+    networks:
+      - swagger-mcp
+
+  # Load balancer for multiple instances
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8090:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - swagger-mcp-go
+      - swagger-mcp-go-jsonplaceholder
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - swagger-mcp
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - swagger-mcp
+
+  # Grafana for metrics visualization
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - swagger-mcp
+
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger collector HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    restart: unless-stopped
+    networks:
+      - swagger-mcp
+
+  # Redis for caching (if needed for rate limiting)
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - swagger-mcp
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  redis_data:
+
+networks:
+  swagger-mcp:
+    driver: bridge
