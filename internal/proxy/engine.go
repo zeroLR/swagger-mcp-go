@@ -138,74 +138,79 @@ func (e *Engine) createRequest(ctx context.Context, route *parser.RouteConfig, r
 	var body io.Reader
 	var contentType string
 
-	// Handle request body
-	if bodyData, exists := params["body"]; exists && route.RequestBody != nil {
-		switch route.RequestBody.ContentType {
-		case "application/json":
-			jsonData, err := json.Marshal(bodyData)
+	if route.RequestBody != nil {
+		if bodyData, ok := params["body"]; ok {
+			b, ct, err := buildRequestBody(route, bodyData)
 			if err != nil {
-				return nil, fmt.Errorf("failed to marshal JSON body: %w", err)
+				return nil, err
 			}
-			body = bytes.NewReader(jsonData)
-			contentType = "application/json"
-
-		case "application/x-www-form-urlencoded":
-			values := make(map[string][]string)
-			if bodyMap, ok := bodyData.(map[string]interface{}); ok {
-				for key, value := range bodyMap {
-					if values[key] == nil {
-						values[key] = make([]string, 0)
-					}
-					values[key] = append(values[key], fmt.Sprintf("%v", value))
-				}
-			}
-			urlValues := url.Values(values)
-			body = strings.NewReader(urlValues.Encode())
-			contentType = "application/x-www-form-urlencoded"
-
-		case "text/plain":
-			body = strings.NewReader(fmt.Sprintf("%v", bodyData))
-			contentType = "text/plain"
-
-		default:
-			// Try to marshal as JSON by default
-			jsonData, err := json.Marshal(bodyData)
-			if err != nil {
-				body = strings.NewReader(fmt.Sprintf("%v", bodyData))
-				contentType = "text/plain"
-			} else {
-				body = bytes.NewReader(jsonData)
-				contentType = "application/json"
-			}
+			body, contentType = b, ct
 		}
 	}
 
-	// Create request
 	req, err := http.NewRequestWithContext(ctx, route.Method, reqURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
-	// Set content type for request body
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
 
-	// Add default headers
-	for key, value := range e.headers {
+	addDefaultHeaders(req, e.headers)
+	addParameterHeaders(req, route.Parameters, params)
+
+	return req, nil
+}
+
+// buildRequestBody constructs the request body and content type according to route config
+func buildRequestBody(route *parser.RouteConfig, bodyData interface{}) (io.Reader, string, error) {
+	switch route.RequestBody.ContentType {
+	case "application/json":
+		jsonData, err := json.Marshal(bodyData)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to marshal JSON body: %w", err)
+		}
+		return bytes.NewReader(jsonData), "application/json", nil
+	case "application/x-www-form-urlencoded":
+		values := make(map[string][]string)
+		if bodyMap, ok := bodyData.(map[string]interface{}); ok {
+			for key, value := range bodyMap {
+				if values[key] == nil {
+					values[key] = make([]string, 0)
+				}
+				values[key] = append(values[key], fmt.Sprintf("%v", value))
+			}
+		}
+		urlValues := url.Values(values)
+		return strings.NewReader(urlValues.Encode()), "application/x-www-form-urlencoded", nil
+	case "text/plain":
+		return strings.NewReader(fmt.Sprintf("%v", bodyData)), "text/plain", nil
+	default:
+		jsonData, err := json.Marshal(bodyData)
+		if err != nil {
+			return strings.NewReader(fmt.Sprintf("%v", bodyData)), "text/plain", nil
+		}
+		return bytes.NewReader(jsonData), "application/json", nil
+	}
+}
+
+// addDefaultHeaders applies default engine headers
+func addDefaultHeaders(req *http.Request, headers map[string]string) {
+	for key, value := range headers {
 		req.Header.Set(key, value)
 	}
+}
 
-	// Add parameter headers
-	for _, param := range route.Parameters {
+// addParameterHeaders applies header parameters from the route configuration
+func addParameterHeaders(req *http.Request, parameters []parser.ParameterConfig, params map[string]interface{}) {
+	for _, param := range parameters {
 		if param.In == "header" {
 			if value, exists := params[param.Name]; exists {
 				req.Header.Set(param.Name, fmt.Sprintf("%v", value))
 			}
 		}
 	}
-
-	return req, nil
 }
 
 // GetExecutor returns a function that can execute a specific route

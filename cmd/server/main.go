@@ -36,48 +36,12 @@ const version = "1.0.0"
 func main() {
 	flag.Parse()
 
-	if *showHelp {
-		printHelp()
-		os.Exit(0)
-	}
+	handleBasicFlags()
 
-	if *showVersion {
-		fmt.Printf("swagger-mcp-go version %s\n", version)
-		os.Exit(0)
-	}
+	cfg := mustLoadConfig()
+	normalizeMode(cfg)
 
-	if *swaggerFile == "" {
-		fmt.Fprintf(os.Stderr, "Error: --swagger-file is required\n")
-		printHelp()
-		os.Exit(1)
-	}
-
-	// Load configuration
-	cfg, err := config.Load(*configFile)
-	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
-	}
-
-	// Override mode if specified
-	if *mode != "stdio" {
-		switch *mode {
-		case "http", "sse":
-			// Valid modes
-		default:
-			log.Fatalf("Invalid mode: %s. Must be one of: stdio, http, sse", *mode)
-		}
-	}
-
-	// Disable console logging for stdio mode
-	if *mode == "stdio" {
-		cfg.Logging.Level = "error" // Minimize logging for stdio
-	}
-
-	// Initialize logger
-	logger, err := initLogger(cfg)
-	if err != nil {
-		log.Fatalf("Failed to initialize logger: %v", err)
-	}
+	logger := mustInitLogger(cfg)
 	defer logger.Sync()
 
 	logger.Info("Starting swagger-mcp-go",
@@ -85,81 +49,134 @@ func main() {
 		zap.String("mode", *mode),
 		zap.String("swaggerFile", *swaggerFile))
 
-	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Initialize components
+	reg, fetcher := initCoreComponents(ctx, cfg, logger)
+	mcpServer := initMCPServer(ctx, cfg, reg, fetcher, logger)
+
+	httpServer := maybeStartHTTPServer(cfg, logger, reg)
+
+	waitForShutdownSignal(logger)
+	performShutdown(cancel, httpServer, mcpServer, logger)
+}
+
+// handleBasicFlags processes help, version and required flags
+func handleBasicFlags() {
+	if *showHelp {
+		printHelp()
+		os.Exit(0)
+	}
+	if *showVersion {
+		fmt.Printf("swagger-mcp-go version %s\n", version)
+		os.Exit(0)
+	}
+	if *swaggerFile == "" {
+		fmt.Fprintf(os.Stderr, "Error: --swagger-file is required\n")
+		printHelp()
+		os.Exit(1)
+	}
+}
+
+// mustLoadConfig loads configuration or exits on failure
+func mustLoadConfig() *config.Config {
+	cfg, err := config.Load(*configFile)
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+	return cfg
+}
+
+// normalizeMode validates and applies mode specific adjustments
+func normalizeMode(cfg *config.Config) {
+	if *mode != "stdio" {
+		switch *mode {
+		case "http", "sse":
+		default:
+			log.Fatalf("Invalid mode: %s. Must be one of: stdio, http, sse", *mode)
+		}
+	}
+	if *mode == "stdio" { // minimize logging
+		cfg.Logging.Level = "error"
+	}
+}
+
+// mustInitLogger initializes the logger or exits on failure
+func mustInitLogger(cfg *config.Config) *zap.Logger {
+	logger, err := initLogger(cfg)
+	if err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+	return logger
+}
+
+// initCoreComponents creates registry and spec fetcher and starts cleanup
+func initCoreComponents(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*registry.Registry, *specs.Fetcher) {
 	reg := registry.New(logger.Named("registry"))
-
-	// Parse max size for fetcher
-	maxSize := int64(10 * 1024 * 1024) // 10MB default
+	maxSize := int64(10 * 1024 * 1024)
 	fetcher := specs.New(logger.Named("specs"), cfg.Upstream.Timeout, maxSize)
-
-	// Start registry cleanup
 	reg.StartCleanup(ctx, 5*time.Minute)
+	return reg, fetcher
+}
 
-	// Create MCP server
+// initMCPServer loads spec and starts MCP server
+func initMCPServer(ctx context.Context, cfg *config.Config, reg *registry.Registry, fetcher *specs.Fetcher, logger *zap.Logger) *mcp.Server {
 	mcpServer := mcp.NewServer(logger.Named("mcp"), cfg, reg, fetcher)
 	mcpServer.SetMode(mcp.ServerMode(*mode))
-
-	// Load OpenAPI spec and register tools
 	headers := make(map[string]string)
 	if err := mcpServer.LoadSpecFromFile(*swaggerFile, *baseURL, headers); err != nil {
 		logger.Fatal("Failed to load OpenAPI spec", zap.Error(err))
 	}
-
-	// Start MCP server
 	go func() {
 		if err := mcpServer.Start(ctx); err != nil {
 			logger.Error("MCP server error", zap.Error(err))
 		}
 	}()
+	return mcpServer
+}
 
-	// Start HTTP server only if not in stdio mode
-	var httpServer *http.Server
-	if *mode != "stdio" {
-		router := setupRouter(cfg, logger.Named("http"), reg)
-		httpServer = &http.Server{
-			Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
-			Handler:      router,
-			ReadTimeout:  cfg.Server.ReadTimeout,
-			WriteTimeout: cfg.Server.WriteTimeout,
-		}
-
-		go func() {
-			logger.Info("Starting HTTP server", zap.String("addr", httpServer.Addr))
-			if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				logger.Fatal("HTTP server error", zap.Error(err))
-			}
-		}()
+// maybeStartHTTPServer starts HTTP server if mode requires it
+func maybeStartHTTPServer(cfg *config.Config, logger *zap.Logger, reg *registry.Registry) *http.Server {
+	if *mode == "stdio" {
+		return nil
 	}
+	router := setupRouter(cfg, logger.Named("http"), reg)
+	httpServer := &http.Server{
+		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
+		Handler:      router,
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
+	}
+	go func() {
+		logger.Info("Starting HTTP server", zap.String("addr", httpServer.Addr))
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Fatal("HTTP server error", zap.Error(err))
+		}
+	}()
+	return httpServer
+}
 
-	// Wait for interrupt signal
+// waitForShutdownSignal blocks until an interrupt signal is received
+func waitForShutdownSignal(logger *zap.Logger) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
-
 	logger.Info("Shutting down server...")
+}
 
-	// Cancel context to stop background processes
+// performShutdown gracefully stops servers and background processes
+func performShutdown(cancel context.CancelFunc, httpServer *http.Server, mcpServer *mcp.Server, logger *zap.Logger) {
 	cancel()
-
-	// Shutdown HTTP server with timeout if running
 	if httpServer != nil {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer shutdownCancel()
-
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
 			logger.Error("HTTP server shutdown error", zap.Error(err))
 		}
 	}
-
-	// Stop MCP server
 	if err := mcpServer.Stop(); err != nil {
 		logger.Error("MCP server stop error", zap.Error(err))
 	}
-
 	logger.Info("Server stopped")
 }
 
