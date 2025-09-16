@@ -13,6 +13,7 @@ const (
 	AuthTypeBasic  AuthType = "basic"
 	AuthTypeBearer AuthType = "bearer"
 	AuthTypeOAuth2 AuthType = "oauth2"
+	AuthTypeAPIKey AuthType = "apikey"
 )
 
 // SpecInfo holds information about a registered OpenAPI specification
