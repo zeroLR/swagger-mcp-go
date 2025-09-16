@@ -1,0 +1,134 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Pet Store API",
+    "description": "A simple pet store API for testing OpenAPI to MCP conversion",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://petstore.swagger.io/v2"
+    }
+  ],
+  "paths": {
+    "/pet": {
+      "post": {
+        "operationId": "addPet",
+        "summary": "Add a new pet to the store",
+        "description": "Creates a new pet in the pet store",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Name of the pet"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["available", "pending", "sold"],
+                    "description": "Pet status"
+                  }
+                },
+                "required": ["name"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pet created successfully"
+          }
+        }
+      }
+    },
+    "/pet/{petId}": {
+      "get": {
+        "operationId": "getPetById",
+        "summary": "Find pet by ID",
+        "description": "Returns a single pet",
+        "parameters": [
+          {
+            "name": "petId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "ID of pet to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation"
+          },
+          "404": {
+            "description": "Pet not found"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePet",
+        "summary": "Deletes a pet",
+        "description": "Deletes a pet from the store",
+        "parameters": [
+          {
+            "name": "petId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Pet id to delete"
+          },
+          {
+            "name": "api_key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "API key for authentication"
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Invalid pet value"
+          }
+        }
+      }
+    },
+    "/pet/findByStatus": {
+      "get": {
+        "operationId": "findPetsByStatus",
+        "summary": "Finds Pets by status",
+        "description": "Multiple status values can be provided with comma separated strings",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["available", "pending", "sold"]
+            },
+            "description": "Status values that need to be considered for filter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation"
+          },
+          "400": {
+            "description": "Invalid status value"
+          }
+        }
+      }
+    }
+  }
+}

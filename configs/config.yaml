@@ -1,0 +1,54 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+  readTimeout: 30s
+  writeTimeout: 30s
+
+mcp:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8081
+
+logging:
+  level: "info"
+  format: "json"
+
+metrics:
+  enabled: true
+  path: "/metrics"
+
+tracing:
+  enabled: true
+  endpoint: "http://jaeger:14268/api/traces"
+  serviceName: "swagger-mcp-go"
+
+upstream:
+  timeout: 30s
+  retryCount: 3
+  retryDelay: 1s
+  circuitBreaker:
+    threshold: 5
+    timeout: 60s
+
+auth:
+  jwt:
+    jwksURL: "https://example.com/.well-known/jwks.json"
+    issuer: "https://example.com"
+    audience: "api"
+  oauth2:
+    tokenURL: "https://example.com/oauth/token"
+    clientID: "${OAUTH2_CLIENT_ID}"
+    clientSecret: "${OAUTH2_CLIENT_SECRET}"
+
+specs:
+  defaultTTL: "1h"
+  maxSize: "10MB"
+  
+policies:
+  rateLimit:
+    enabled: false
+    requestsPerMinute: 100
+  cors:
+    enabled: true
+    allowOrigins: ["*"]
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
