@@ -18,7 +18,9 @@
 - ☸️ **Kubernetes Native**: Complete manifests with HPA, monitoring, and security policies
 - 📈 **Monitoring**: Prometheus metrics, Grafana dashboards, and distributed tracing
 - 🔄 **Request Transformation**: Pre/post processing hooks for request/response modification
-- 🌐 **WebSocket Ready**: WebSocket implementation available (CLI integration pending)
+- 🌐 **WebSocket Support**: Complete WebSocket transport mode with CLI integration
+- 🔐 **Advanced Authentication**: Complete OAuth2 flows, JWT/JWKS, API Keys, Basic Auth
+- 📊 **API Versioning**: Multiple versioning strategies with schema evolution and compatibility checking
 
 ## Quick Start
 
@@ -464,7 +466,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Roadmap
 
 - [x] Core OpenAPI to MCP transformation
-- [x] Multiple transport modes (stdio, http, sse)
+- [x] Multiple transport modes (stdio, http, sse, websocket)
 - [x] Command-line interface
 - [x] Basic proxy functionality
 - [x] Request/response transformation hooks
@@ -476,8 +478,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [x] Security features (RBAC, Network Policies, Security Context)
 - [x] High availability features (HPA, PDB, Health Checks)
 - [x] Configuration management with environment variable support
-- [~] Authentication framework (JWT, OAuth2 config structure ready)
-- [~] WebSocket transport (implementation ready, integration pending)
-- [ ] Complete authentication provider implementations (Bearer, API Key, Basic Auth)
-- [ ] OAuth2 flows (Authorization Code, Client Credentials)
-- [ ] API versioning and schema evolution
+- [x] Authentication framework (JWT, OAuth2, Basic Auth, API Key)
+- [x] WebSocket transport (implementation complete with CLI integration)
+- [x] Complete authentication provider implementations (Bearer, API Key, Basic Auth)
+- [x] OAuth2 flows (Authorization Code, Client Credentials, Token Introspection, PKCE)
+- [x] API versioning and schema evolution
