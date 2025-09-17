@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/zeroLR/swagger-mcp-go/internal/models"
@@ -309,5 +310,88 @@ func TestAuthMiddleware(t *testing.T) {
 				t.Errorf("Expected status %d, got %d", tt.expectedStatus, recorder.Code)
 			}
 		})
+	}
+}
+
+func TestOAuth2Provider(t *testing.T) {
+	logger := zap.NewNop()
+	provider := NewOAuth2Provider(logger)
+
+	// Configure OAuth2 provider
+	config := map[string]interface{}{
+		"tokenURL":     "https://auth.example.com/token",
+		"clientID":     "test-client",
+		"clientSecret": "test-secret",
+		"scopes":       []interface{}{"read", "write"},
+	}
+	err := provider.Configure(config)
+	if err != nil {
+		t.Fatalf("Failed to configure OAuth2 provider: %v", err)
+	}
+
+	// Test type
+	if provider.Type() != models.AuthTypeOAuth2 {
+		t.Errorf("Expected type %s, got %s", models.AuthTypeOAuth2, provider.Type())
+	}
+
+	// Test basic token validation (without introspection URL)
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer valid-token")
+
+	authCtx, err := provider.Authenticate(context.Background(), req)
+	if err != nil {
+		t.Errorf("Authenticate should not fail with valid token: %v", err)
+	}
+	if authCtx == nil || !authCtx.Valid {
+		t.Errorf("Expected valid auth context")
+	}
+
+	// Test invalid token format
+	req = httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Invalid token")
+
+	_, err = provider.Authenticate(context.Background(), req)
+	if err == nil {
+		t.Errorf("Expected error for invalid token format")
+	}
+
+	// Test missing authorization header
+	req = httptest.NewRequest("GET", "/", nil)
+	_, err = provider.Authenticate(context.Background(), req)
+	if err == nil {
+		t.Errorf("Expected error for missing authorization header")
+	}
+}
+
+func TestOAuth2AuthorizationURL(t *testing.T) {
+	logger := zap.NewNop()
+	provider := NewOAuth2Provider(logger)
+
+	config := map[string]interface{}{
+		"authorizationURL": "https://auth.example.com/authorize",
+		"clientID":         "test-client",
+		"scopes":           []interface{}{"read", "write"},
+	}
+	err := provider.Configure(config)
+	if err != nil {
+		t.Fatalf("Failed to configure OAuth2 provider: %v", err)
+	}
+
+	authURL, err := provider.GetAuthorizationURL("https://app.example.com/callback", "test-state", "")
+	if err != nil {
+		t.Fatalf("Failed to get authorization URL: %v", err)
+	}
+
+	if !strings.Contains(authURL, "https://auth.example.com/authorize") {
+		t.Errorf("Authorization URL should contain base URL")
+	}
+	if !strings.Contains(authURL, "client_id=test-client") {
+		t.Errorf("Authorization URL should contain client ID")
+	}
+	if !strings.Contains(authURL, "redirect_uri=") {
+		t.Errorf("Authorization URL should contain redirect URI")
+	}
+	if !strings.Contains(authURL, "state=test-state") {
+		t.Errorf("Authorization URL should contain state")
 	}
 }

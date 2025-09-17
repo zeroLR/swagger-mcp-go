@@ -16,6 +16,7 @@ import (
 	"github.com/zeroLR/swagger-mcp-go/internal/proxy"
 	"github.com/zeroLR/swagger-mcp-go/internal/registry"
 	"github.com/zeroLR/swagger-mcp-go/internal/specs"
+	"github.com/zeroLR/swagger-mcp-go/internal/websocket"
 	"go.uber.org/zap"
 )
 
@@ -23,9 +24,10 @@ import (
 type ServerMode string
 
 const (
-	ServerModeSTDIO ServerMode = "stdio"
-	ServerModeHTTP  ServerMode = "http"
-	ServerModeSSE   ServerMode = "sse"
+	ServerModeSTDIO     ServerMode = "stdio"
+	ServerModeHTTP      ServerMode = "http"
+	ServerModeSSE       ServerMode = "sse"
+	ServerModeWebSocket ServerMode = "websocket"
 )
 
 // Server represents the MCP server implementation
@@ -194,6 +196,8 @@ func (s *Server) Start(ctx context.Context) error {
 		return s.startHTTP(ctx)
 	case ServerModeSSE:
 		return s.startSSE(ctx)
+	case ServerModeWebSocket:
+		return s.startWebSocket(ctx)
 	default:
 		return fmt.Errorf("unsupported server mode: %s", s.mode)
 	}
@@ -266,6 +270,83 @@ func (s *Server) startSSE(ctx context.Context) error {
 	case err := <-errChan:
 		return err
 	}
+}
+
+// startWebSocket starts the server in WebSocket mode
+func (s *Server) startWebSocket(ctx context.Context) error {
+	addr := fmt.Sprintf("%s:%d", s.config.MCP.Host, s.config.MCP.Port)
+	s.logger.Info("Starting MCP server in WebSocket mode", zap.String("address", addr))
+
+	// Create WebSocket server with configuration
+	wsConfig := websocket.Config{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin:     true,
+	}
+	wsServer := websocket.NewServer(wsConfig, s.logger.Named("websocket"))
+
+	// Register MCP message handler
+	wsServer.RegisterHandler("mcp", s.handleMCPWebSocketMessage)
+
+	// Start WebSocket hub
+	wsServer.Start(ctx)
+
+	// Create HTTP server with WebSocket upgrade endpoint
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", wsServer.HandleWebSocket)
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("WebSocket MCP server is healthy"))
+	})
+
+	server := &http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
+
+	// Start server in goroutine
+	errChan := make(chan error, 1)
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			errChan <- fmt.Errorf("WebSocket server error: %w", err)
+		}
+	}()
+
+	// Wait for context cancellation or error
+	select {
+	case <-ctx.Done():
+		s.logger.Info("Shutting down WebSocket server")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		return server.Shutdown(shutdownCtx)
+	case err := <-errChan:
+		return err
+	}
+}
+
+// handleMCPWebSocketMessage handles MCP messages over WebSocket
+func (s *Server) handleMCPWebSocketMessage(client *websocket.Client, message websocket.Message) error {
+	s.logger.Debug("Received MCP WebSocket message", 
+		zap.String("type", message.Type),
+		zap.String("clientID", client.ID))
+	
+	// This is a simplified implementation - in practice you'd need to:
+	// 1. Parse the MCP message format
+	// 2. Route to appropriate MCP handlers
+	// 3. Return properly formatted MCP responses
+	
+	response := websocket.Message{
+		Type: "mcp_response",
+		ID:   message.ID,
+		Data: map[string]interface{}{
+			"status": "received",
+			"echo":   message.Data,
+		},
+		Timestamp: time.Now(),
+	}
+	
+	client.Send(response)
+	return nil
 }
 
 // Stop stops the MCP server

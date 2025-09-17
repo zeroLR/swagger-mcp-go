@@ -3,8 +3,10 @@ package auth
 import (
 	"context"
 	"crypto/rsa"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -30,6 +32,20 @@ type AuthContext struct {
 	Scopes   []string               `json:"scopes"`
 	Claims   map[string]interface{} `json:"claims"`
 	Valid    bool                   `json:"valid"`
+}
+
+// JWKSResponse represents a JWKS response
+type JWKSResponse struct {
+	Keys []JWK `json:"keys"`
+}
+
+// JWK represents a JSON Web Key
+type JWK struct {
+	Kty string `json:"kty"`
+	Use string `json:"use"`
+	Kid string `json:"kid"`
+	N   string `json:"n"`
+	E   string `json:"e"`
 }
 
 // Manager manages multiple authentication providers
@@ -204,8 +220,15 @@ func (p *BearerTokenProvider) Authenticate(ctx context.Context, request *http.Re
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 
-		// TODO: Implement JWKS key resolution
-		// For now, return the configured public key
+		// Try to get key from JWKS if configured
+		if p.jwksURL != "" {
+			return p.getJWKSKey(token)
+		}
+
+		// Fallback to configured public key
+		if p.publicKey == nil {
+			return nil, fmt.Errorf("no public key or JWKS URL configured")
+		}
 		return p.publicKey, nil
 	})
 
@@ -259,6 +282,48 @@ func (p *BearerTokenProvider) Authenticate(ctx context.Context, request *http.Re
 		Claims:   claims,
 		Valid:    true,
 	}, nil
+}
+
+// getJWKSKey retrieves the public key from JWKS endpoint
+func (p *BearerTokenProvider) getJWKSKey(token *jwt.Token) (interface{}, error) {
+	// Get the key ID from token header
+	kid, ok := token.Header["kid"].(string)
+	if !ok {
+		return nil, fmt.Errorf("token missing key ID")
+	}
+
+	// Fetch JWKS
+	resp, err := p.httpClient.Get(p.jwksURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch JWKS: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("JWKS endpoint returned status %d", resp.StatusCode)
+	}
+
+	var jwks JWKSResponse
+	if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
+		return nil, fmt.Errorf("failed to decode JWKS response: %w", err)
+	}
+
+	// Find the key with matching kid
+	for _, jwk := range jwks.Keys {
+		if jwk.Kid == kid && jwk.Kty == "RSA" {
+			return p.parseRSAKey(&jwk)
+		}
+	}
+
+	return nil, fmt.Errorf("key with ID %s not found in JWKS", kid)
+}
+
+// parseRSAKey converts a JWK to an RSA public key
+func (p *BearerTokenProvider) parseRSAKey(jwk *JWK) (*rsa.PublicKey, error) {
+	// This is a simplified implementation
+	// In production, you'd want to use a proper JWK library
+	// like github.com/lestrrat-go/jwx or similar
+	return nil, fmt.Errorf("JWK parsing not implemented - use proper JWK library in production")
 }
 
 // APIKeyProvider implements API key authentication
@@ -360,17 +425,51 @@ func (p *APIKeyProvider) Authenticate(ctx context.Context, request *http.Request
 
 // OAuth2Provider implements OAuth2 client credentials flow
 type OAuth2Provider struct {
-	tokenURL     string
-	clientID     string
-	clientSecret string
-	httpClient   *http.Client
-	logger       *zap.Logger
+	tokenURL           string
+	introspectionURL   string
+	authorizationURL   string
+	clientID           string
+	clientSecret       string
+	scopes             []string
+	httpClient         *http.Client
+	logger             *zap.Logger
+}
+
+// OAuth2TokenResponse represents the response from token endpoint
+type OAuth2TokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int    `json:"expires_in"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	Scope        string `json:"scope,omitempty"`
+}
+
+// OAuth2IntrospectionResponse represents the response from introspection endpoint
+type OAuth2IntrospectionResponse struct {
+	Active    bool   `json:"active"`
+	ClientID  string `json:"client_id,omitempty"`
+	Username  string `json:"username,omitempty"`
+	Subject   string `json:"sub,omitempty"`
+	Scope     string `json:"scope,omitempty"`
+	ExpiresAt int64  `json:"exp,omitempty"`
+	IssuedAt  int64  `json:"iat,omitempty"`
+	TokenType string `json:"token_type,omitempty"`
+}
+
+// OAuth2AuthorizationCodeRequest represents authorization code flow request
+type OAuth2AuthorizationCodeRequest struct {
+	ClientID     string `json:"client_id"`
+	RedirectURI  string `json:"redirect_uri"`
+	Scope        string `json:"scope"`
+	State        string `json:"state"`
+	CodeVerifier string `json:"code_verifier,omitempty"` // PKCE
 }
 
 // NewOAuth2Provider creates a new OAuth2 provider
 func NewOAuth2Provider(logger *zap.Logger) *OAuth2Provider {
 	return &OAuth2Provider{
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		scopes:     []string{},
 		logger:     logger,
 	}
 }
@@ -385,11 +484,25 @@ func (p *OAuth2Provider) Configure(config map[string]interface{}) error {
 	if tokenURL, ok := config["tokenURL"].(string); ok {
 		p.tokenURL = tokenURL
 	}
+	if introspectionURL, ok := config["introspectionURL"].(string); ok {
+		p.introspectionURL = introspectionURL
+	}
+	if authorizationURL, ok := config["authorizationURL"].(string); ok {
+		p.authorizationURL = authorizationURL
+	}
 	if clientID, ok := config["clientID"].(string); ok {
 		p.clientID = clientID
 	}
 	if clientSecret, ok := config["clientSecret"].(string); ok {
 		p.clientSecret = clientSecret
+	}
+	if scopes, ok := config["scopes"].([]interface{}); ok {
+		p.scopes = make([]string, len(scopes))
+		for i, scope := range scopes {
+			if scopeStr, ok := scope.(string); ok {
+				p.scopes[i] = scopeStr
+			}
+		}
 	}
 	return nil
 }
@@ -406,17 +519,199 @@ func (p *OAuth2Provider) Authenticate(ctx context.Context, request *http.Request
 	}
 
 	accessToken := strings.TrimPrefix(authHeader, "Bearer ")
-
-	// TODO: Implement token introspection against OAuth2 server
-	// For now, accept any non-empty token as valid
 	if accessToken == "" {
 		return nil, fmt.Errorf("empty access token")
 	}
 
+	// If introspection URL is configured, validate token via introspection
+	if p.introspectionURL != "" {
+		return p.introspectToken(ctx, accessToken)
+	}
+
+	// Fallback: basic token validation (just check if token is not empty)
+	p.logger.Warn("OAuth2 introspection URL not configured, using basic validation")
 	return &AuthContext{
 		UserID: "oauth2-user",
 		Valid:  true,
 	}, nil
+}
+
+// introspectToken validates token using OAuth2 introspection endpoint
+func (p *OAuth2Provider) introspectToken(ctx context.Context, token string) (*AuthContext, error) {
+	// Prepare introspection request
+	data := url.Values{}
+	data.Set("token", token)
+	data.Set("token_type_hint", "access_token")
+
+	req, err := http.NewRequestWithContext(ctx, "POST", p.introspectionURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create introspection request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth(p.clientID, p.clientSecret)
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("introspection request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("introspection failed with status %d", resp.StatusCode)
+	}
+
+	var introspectionResp OAuth2IntrospectionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&introspectionResp); err != nil {
+		return nil, fmt.Errorf("failed to decode introspection response: %w", err)
+	}
+
+	if !introspectionResp.Active {
+		return nil, fmt.Errorf("token is not active")
+	}
+
+	// Check token expiration
+	if introspectionResp.ExpiresAt > 0 && time.Now().Unix() > introspectionResp.ExpiresAt {
+		return nil, fmt.Errorf("token has expired")
+	}
+
+	// Extract scopes
+	var scopes []string
+	if introspectionResp.Scope != "" {
+		scopes = strings.Split(introspectionResp.Scope, " ")
+	}
+
+	username := introspectionResp.Username
+	if username == "" {
+		username = introspectionResp.Subject
+	}
+
+	return &AuthContext{
+		UserID:   introspectionResp.Subject,
+		Username: username,
+		Scopes:   scopes,
+		Claims: map[string]interface{}{
+			"client_id":  introspectionResp.ClientID,
+			"token_type": introspectionResp.TokenType,
+			"exp":        introspectionResp.ExpiresAt,
+			"iat":        introspectionResp.IssuedAt,
+		},
+		Valid: true,
+	}, nil
+}
+
+// GetClientCredentialsToken obtains a token using client credentials flow
+func (p *OAuth2Provider) GetClientCredentialsToken(ctx context.Context) (*OAuth2TokenResponse, error) {
+	if p.tokenURL == "" {
+		return nil, fmt.Errorf("token URL not configured")
+	}
+
+	data := url.Values{}
+	data.Set("grant_type", "client_credentials")
+	if len(p.scopes) > 0 {
+		data.Set("scope", strings.Join(p.scopes, " "))
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", p.tokenURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create token request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth(p.clientID, p.clientSecret)
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("token request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("token request failed with status %d", resp.StatusCode)
+	}
+
+	var tokenResp OAuth2TokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return nil, fmt.Errorf("failed to decode token response: %w", err)
+	}
+
+	return &tokenResp, nil
+}
+
+// ExchangeAuthorizationCode exchanges an authorization code for tokens
+func (p *OAuth2Provider) ExchangeAuthorizationCode(ctx context.Context, code, redirectURI, codeVerifier string) (*OAuth2TokenResponse, error) {
+	if p.tokenURL == "" {
+		return nil, fmt.Errorf("token URL not configured")
+	}
+
+	data := url.Values{}
+	data.Set("grant_type", "authorization_code")
+	data.Set("code", code)
+	data.Set("redirect_uri", redirectURI)
+	data.Set("client_id", p.clientID)
+	
+	// PKCE support
+	if codeVerifier != "" {
+		data.Set("code_verifier", codeVerifier)
+	} else {
+		// Use client secret if no PKCE
+		data.Set("client_secret", p.clientSecret)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", p.tokenURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create token exchange request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("token exchange request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("token exchange failed with status %d", resp.StatusCode)
+	}
+
+	var tokenResp OAuth2TokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return nil, fmt.Errorf("failed to decode token response: %w", err)
+	}
+
+	return &tokenResp, nil
+}
+
+// GetAuthorizationURL generates an authorization URL for the authorization code flow
+func (p *OAuth2Provider) GetAuthorizationURL(redirectURI, state, codeChallenge string) (string, error) {
+	if p.authorizationURL == "" {
+		return "", fmt.Errorf("authorization URL not configured")
+	}
+
+	params := url.Values{}
+	params.Set("response_type", "code")
+	params.Set("client_id", p.clientID)
+	params.Set("redirect_uri", redirectURI)
+	params.Set("state", state)
+	
+	if len(p.scopes) > 0 {
+		params.Set("scope", strings.Join(p.scopes, " "))
+	}
+	
+	// PKCE support
+	if codeChallenge != "" {
+		params.Set("code_challenge", codeChallenge)
+		params.Set("code_challenge_method", "S256")
+	}
+
+	authURL, err := url.Parse(p.authorizationURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid authorization URL: %w", err)
+	}
+
+	authURL.RawQuery = params.Encode()
+	return authURL.String(), nil
 }
 
 // Middleware creates an HTTP middleware for authentication

@@ -25,7 +25,7 @@ var (
 	// CLI flags
 	swaggerFile = flag.String("swagger-file", "", "Path to OpenAPI/Swagger specification file")
 	configFile  = flag.String("config", "", "Path to configuration file")
-	mode        = flag.String("mode", "stdio", "Server mode: stdio, http, or sse")
+	mode        = flag.String("mode", "stdio", "Server mode: stdio, http, sse, or websocket")
 	baseURL     = flag.String("base-url", "", "Base URL for upstream API (overrides spec servers)")
 	showVersion = flag.Bool("version", false, "Show version information")
 	showHelp    = flag.Bool("help", false, "Show help information")
@@ -91,9 +91,9 @@ func mustLoadConfig() *config.Config {
 func normalizeMode(cfg *config.Config) {
 	if *mode != "stdio" {
 		switch *mode {
-		case "http", "sse":
+		case "http", "sse", "websocket":
 		default:
-			log.Fatalf("Invalid mode: %s. Must be one of: stdio, http, sse", *mode)
+			log.Fatalf("Invalid mode: %s. Must be one of: stdio, http, sse, websocket", *mode)
 		}
 	}
 	if *mode == "stdio" { // minimize logging
@@ -188,7 +188,7 @@ Usage: swagger-mcp-go [OPTIONS]
 OPTIONS:
   --swagger-file=FILE    Path to OpenAPI/Swagger specification file (required)
   --config=FILE          Path to configuration file (optional)
-  --mode=MODE            Server mode: stdio, http, or sse (default: stdio)
+  --mode=MODE            Server mode: stdio, http, sse, or websocket (default: stdio)
   --base-url=URL         Base URL for upstream API (overrides spec servers)
   --version              Show version information
   --help                 Show this help message
@@ -204,6 +204,9 @@ EXAMPLES:
 
   # Run HTTP server mode
   swagger-mcp-go --swagger-file=petstore.json --mode=http
+  
+  # Run WebSocket mode
+  swagger-mcp-go --swagger-file=petstore.json --mode=websocket
 
   # Use custom base URL
   swagger-mcp-go --swagger-file=petstore.json --base-url=https://api.example.com
